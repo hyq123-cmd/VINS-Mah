@@ -1,0 +1,9 @@
+<launch>
+  <arg name="config_file"
+       default="$(find vins_mah)/../config/viode/calibration.yaml"/>
+
+  <node pkg="vins_mah" type="vins_mah_node" name="vins_estimator" output="screen" args="$(arg config_file)" >
+  </node>
+</launch>
+
+
