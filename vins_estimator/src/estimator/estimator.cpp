@@ -546,7 +546,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         set<int> keepIndex, removeIndex;
         outliersRejection(keepIndex, removeIndex);
         f_manager.removeOutlier(removeIndex);
-        // featureTracker.saveImage(inputImageCnt, keepIndex, removeIndex);
+        featureTracker.saveImage(inputImageCnt, keepIndex, removeIndex);
         optimization();
         // set<int> removeIndex;
         // outliersRejection(removeIndex);
