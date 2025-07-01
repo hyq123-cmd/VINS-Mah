@@ -546,7 +546,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         set<int> keepIndex, removeIndex;
         outliersRejection(keepIndex, removeIndex);
         f_manager.removeOutlier(removeIndex);
-        featureTracker.saveImage(inputImageCnt, keepIndex, removeIndex);
+        // featureTracker.saveImage(inputImageCnt, keepIndex, removeIndex);
         optimization();
         // set<int> removeIndex;
         // outliersRejection(removeIndex);
@@ -1732,7 +1732,7 @@ Eigen::MatrixXd Estimator::computeSchur(const Eigen::MatrixXd &H,
 
 void Estimator::outliersRejection(set<int> &keepIndex, set<int> &removeIndex)
 {
-    double chi_square_test = 10.597;
+    double chi_square_test = 9.210;
     
     for(auto &it_per_id : f_manager.feature)
     {
