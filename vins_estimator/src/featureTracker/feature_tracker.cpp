@@ -713,7 +713,7 @@ void FeatureTracker::saveImage(const int frameCnt, const set<int> keepIndex, con
             cv::circle(imSave, f.second, 2, cv::Scalar(0, 255, 0), 2);  
     }
     
-    std::string savePath = "/mnt/hgfs/linux_share_file/imTracks/" + to_string(frameCnt) + ".png";
+    std::string savePath = "/mnt/d/temp_resources/imTracks/" + to_string(frameCnt) + ".png";
     cv::imwrite(savePath, imSave);
 }
 
@@ -748,20 +748,4 @@ double FeatureTracker::computeVariance(const cv::Mat& cur_img, const cv::Mat& pr
     double varDelta = (n > 1) ? (sumsq / (n - 1)) : 0.0;
     
     return varDelta;
-}
-
-
-// 这个在这里有什么用？我当时为什么要添加这一个(显然是把归一化的重投影到像素点上)
-cv::Point2f FeatureTracker::undistortedToPixel(const Eigen::Vector3d &normPt)
-{
-    // 构造射线 (x, y, 1)
-    Eigen::Vector3d ray(normPt.x(), normPt.y(), 1.0);
-
-    // 投影到像素平面（含畸变）
-    Eigen::Vector2d uv;
-    m_camera[0]->spaceToPlane(ray, uv);
-
-    // 转为 cv::Point2f 并返回
-    return cv::Point2f(static_cast<float>(uv.x()),
-                       static_cast<float>(uv.y()));
 }

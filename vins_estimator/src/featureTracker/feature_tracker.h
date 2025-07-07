@@ -94,7 +94,6 @@ public:
     void getUndistortedCovs(const int& feature_id, bool right);
     double computeVariance(const cv::Mat& cur_img, const cv::Mat& prev_img,
                         const cv::Point2f& center, int winSize = 21);
-    cv::Point2f undistortedToPixel(const Eigen::Vector3d &normPt);
 
     double fx_inv, fy_inv;
     map<int, double> flowVars;

@@ -1156,6 +1156,24 @@ void Estimator::optimization()
         }
     }
 
+    // ceres::Covariance::Options cov_options;
+    // cov_options.algorithm_type = ceres::CovarianceAlgorithmType::DENSE_SVD;
+    // cov_options.min_reciprocal_condition_number = 1e-12;
+    // cov_options.null_space_rank = -1;
+    // cov_options.apply_loss_function = true; 
+    // cov_options.num_threads = 4;
+    // ceres::Covariance covariance(cov_options);
+    // std::vector<std::pair<const double*, const double*>> cov_blocks;
+    // for (size_t i = 0; i < frame_list.size(); ++i) {
+    //     cov_blocks.emplace_back(para_Pose[frame_list[i]], para_Pose[frame_list[i]]);
+    // }
+    // if (!covariance.Compute(cov_blocks, &problem)) {
+    //     std::cerr << "[ERROR] Failed to compute covariance." << std::endl;
+    //     return;
+    // }
+    // Eigen::Matrix<double, 6, 6, Eigen::RowMajor> cov;
+    // covariance.GetCovarianceBlock(para_Pose[frame_list[9]], para_Pose[frame_list[9]], cov.data());
+
     if(frame_list.size() > 0) {
         ceres::Problem::EvaluateOptions eval_opts;
         eval_opts.apply_loss_function = true;
@@ -1179,18 +1197,32 @@ void Estimator::optimization()
         Eigen::MatrixXd H_total = J.transpose() * J;
 
         // compute covariance
-        int pose_dim = frame_count * 6 + 6;
-        Eigen::MatrixXd S_pinv = computeSchur(H_total, pose_dim);
+        // Eigen::MatrixXd H_pinv = computeHinvFromJacobian(J);
+        Eigen::MatrixXd Hinv_pp = computeHinvPP(H_total);
         
         // store the covariances of UAV's pose
         for(size_t i = 0; i < frame_list.size(); i++) {
             int block_start = frame_list[i] * 6;
-            pose_Covs[i] = S_pinv.block(block_start, block_start, SIZE_POSE - 1, SIZE_POSE - 1);
+            pose_Covs[i] = Hinv_pp.block(block_start, block_start, 6, 6);
         }
+
+        Eigen::Matrix<double, 3, 1> position_variance = pose_Covs[9].diagonal().head<3>();
+        // Eigen::Matrix<double, 3, 1> cere_variance = cov.diagonal().head<3>();
+
+        // print
+        std::stringstream ss;
+        ss << "\nposition std: [" 
+        << sqrt(position_variance(0)) << ", " 
+        << sqrt(position_variance(1)) << ", " 
+        << sqrt(position_variance(2)) << "]";
+        // << "cere std: ["
+        // << sqrt(cere_variance(0)) << ", " 
+        // << sqrt(cere_variance(1)) << ", " 
+        // << sqrt(cere_variance(2)) << "]";
+        ROS_INFO_STREAM(ss.str());
     }
 
     double2vector();
-    //printf("frame_count: %d \n", frame_count);
 
     if(frame_count < WINDOW_SIZE)
         return;
@@ -1670,66 +1702,6 @@ void Estimator::updateLatestStates()
 }
 
 // added by myself
-Eigen::MatrixXd Estimator::computeSchur(const Eigen::MatrixXd &H,
-                                        int  pose_dim,
-                                        double eps_rel,
-                                        int  max_alpha_exp)
-{
-    // ---------- sanity checks ------------------------------------------------
-    const int n = static_cast<int>(H.rows());
-    if (H.cols() != n) {
-        std::cerr << "H is not square (" << n << "×" << H.cols() << ")\n";
-        std::exit(EXIT_FAILURE);
-    }
-    if (pose_dim <= 0 || pose_dim >= n) {
-        std::cerr << "Illegal POSE_DIM (" << pose_dim << ") for n=" << n << "\n";
-        std::exit(EXIT_FAILURE);
-    }
-
-    // ---------- block partition --------------------------------------------
-    const int p = pose_dim;
-    Eigen::MatrixXd H_pp = H.topLeftCorner(p, p);
-    Eigen::MatrixXd H_pl = H.topRightCorner(p, n - p);
-    Eigen::MatrixXd H_lp = H.bottomLeftCorner(n - p,  p);
-    Eigen::MatrixXd H_ll = H.bottomRightCorner(n - p, n - p);
-
-    // ---------- regularise H_ll until PD ------------------------------------
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(H_ll);
-    const double lam_max = es.eigenvalues().maxCoeff();
-    double alpha = lam_max * eps_rel;
-
-    Eigen::LLT<Eigen::MatrixXd> llt;
-    int attempt;
-    for (attempt = 0; attempt < max_alpha_exp; ++attempt) {
-        llt.compute(H_ll + alpha * Eigen::MatrixXd::Identity(H_ll.rows(), H_ll.cols()));
-        if (llt.info() == Eigen::Success)
-            break;
-        alpha *= 2.0;
-    }
-    if (attempt == max_alpha_exp) {
-        std::cerr << "H_ll could not be regularised within 2^" << max_alpha_exp << " ×\n";
-        std::exit(EXIT_FAILURE);
-    }
-
-    // ---------- solve  X = (H_ll+αI)⁻¹ H_lp  + 1× refinement -----------------
-    Eigen::MatrixXd X        = llt.solve(H_lp);
-    Eigen::MatrixXd residual = H_ll * X - H_lp;
-    X -= llt.solve(residual);
-
-    // ---------- Schur complement -------------------------------------------
-    Eigen::MatrixXd S = H_pp - H_pl * X;
-
-    // ---------- Moore–Penrose pseudoinverse via SVD ------------------------
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(S, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    const auto &sigma   = svd.singularValues();
-    const double sigma_thr = eps_rel * sigma.maxCoeff();
-    Eigen::VectorXd sigma_inv = (sigma.array() > sigma_thr)
-                                    .select(sigma.array().inverse(), 0.0);
-    Eigen::MatrixXd S_pinv = svd.matrixV() * sigma_inv.asDiagonal() * svd.matrixU().transpose();
-
-    return S_pinv;
-}
-
 void Estimator::outliersRejection(set<int> &keepIndex, set<int> &removeIndex)
 {
     double chi_square_test = 9.210;
@@ -1769,12 +1741,64 @@ void Estimator::outliersRejection(set<int> &keepIndex, set<int> &removeIndex)
         }
         if(mah2 > chi_square_test) {
             removeIndex.insert(it_per_id.feature_id);
+            // ROS_INFO_STREAM("remove mah2: " << mah2);
         }
         else
             keepIndex.insert(it_per_id.feature_id);
     }
 }
 
+// void Estimator::outliersRejection(set<int> &keepIndex, set<int> &removeIndex)
+// {
+//     //return;
+//     int feature_index = -1;
+//     for (auto &it_per_id : f_manager.feature)
+//     {
+//         double err = 0;
+//         int errCnt = 0;
+//         double mah2 = 0;
+//         int mahCnt = 0;
+//         it_per_id.used_num = it_per_id.feature_per_frame.size();
+//         if (it_per_id.used_num < 4)
+//             continue;
+//         feature_index ++;
+//         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
+//         Vector3d pts_i = it_per_id.feature_per_frame[0].point;
+//         double depth = it_per_id.estimated_depth;
+//         for (auto &it_per_frame : it_per_id.feature_per_frame)
+//         {
+//             imu_j++;
+//             if (imu_i != imu_j)
+//             {
+//                 Vector3d pts_j = it_per_frame.point;             
+//                 double tmp_error = reprojectionError(Rs[imu_i], Ps[imu_i], ric[0], tic[0], 
+//                                                     Rs[imu_j], Ps[imu_j], ric[0], tic[0],
+//                                                     depth, pts_i, pts_j);
+//                 err += tmp_error;
+//                 errCnt++;
+//                 if(imu_j != 10)
+//                 {
+//                     Matrix2d feature_cov;
+//                     feature_cov = it_per_id.feature_per_frame[imu_j - imu_i].featureCovs[0];
+//                     double temp_mah2 = computeMahDist(Rs[imu_i], Ps[imu_i], ric[0], tic[0],
+//                                         Rs[imu_j], Ps[imu_j], ric[0], tic[0],
+//                                         depth, pts_i, pts_j, feature_cov, imu_i, imu_j);
+//                     mah2 += temp_mah2;
+//                     mahCnt++;
+//                 }
+//             }
+//         }
+//         double ave_err = err / errCnt;
+//         double ave_mah2 = mah2 / mahCnt;
+//         //|| ave_mah2 > 9.210
+//         if(ave_err * FOCAL_LENGTH > 9 || ave_mah2 > 5.99) {
+//             removeIndex.insert(it_per_id.feature_id);
+//             cout << "mah distance: " << ave_mah2 << "; err: " << ave_err * FOCAL_LENGTH << endl;
+//         }
+//         else
+//             keepIndex.insert(it_per_id.feature_id);
+//     }
+// }
 
 double Estimator::computeMahDist(const Matrix3d &Ri, const Vector3d &Pi,
                     const Matrix3d &rici, const Vector3d &tici,
@@ -1888,4 +1912,55 @@ pair<int, int> Estimator::computeMaxParallaxFrame(const FeaturePerId& feature, c
     }
 
     return {best_frame, best_camera};
+}
+
+Eigen::MatrixXd Estimator::computeHinvPP(const Eigen::MatrixXd& H)
+{
+    const int dim_p = 66;
+    const double min_reciprocal_condition_number = 1e-12;
+    int total_dim = H.rows();
+
+    // divide Hessian matrix into four blocks
+    Eigen::MatrixXd H_pp = H.topLeftCorner(dim_p, dim_p);
+    Eigen::MatrixXd H_pl = H.topRightCorner(dim_p, total_dim - dim_p);
+    Eigen::MatrixXd H_lp = H.bottomLeftCorner(total_dim - dim_p, dim_p);
+    Eigen::MatrixXd H_ll = H.bottomRightCorner(total_dim - dim_p, total_dim - dim_p);
+
+    Eigen::LLT<Eigen::MatrixXd> llt(H_pp);
+    Eigen::MatrixXd H_pp_inv;
+    if (llt.info() == Eigen::Success) { // try to use Cholesky
+        H_pp_inv = llt.solve(Eigen::MatrixXd::Identity(H_pp.rows(), H_pp.cols()));
+    }
+    else {  // compute inverse or pseudo-inverse of H_pp (using SVD with regularization)
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_pp, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::VectorXd singular_values = svd.singularValues();
+        double thr_1 = min_reciprocal_condition_number * singular_values.maxCoeff(); 
+        Eigen::VectorXd inv_singulars = singular_values.unaryExpr(
+            [thr_1](double s) { return s > thr_1 ? 1.0 / s : 0.0; });
+        H_pp_inv = svd.matrixV() * inv_singulars.asDiagonal() * svd.matrixU().transpose();
+    }
+
+    // compute Schur complement
+    Eigen::MatrixXd tmp1 = H_pp_inv * H_pl;
+    Eigen::MatrixXd tmp2 = H_lp * H_pp_inv;
+    Eigen::MatrixXd Schur = H_ll - tmp2 * H_pl;
+
+    Eigen::LLT<Eigen::MatrixXd> lls(Schur);
+    Eigen::MatrixXd Schur_inv;
+    if (lls.info() == Eigen::Success) { // try to use Cholesky
+        Schur_inv  = lls.solve(Eigen::MatrixXd::Identity(Schur.rows(), Schur.cols()));
+    }
+    else { // Invert Schur complement (also use SVD or regularization)
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd_schur(Schur, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::VectorXd singular_schur = svd_schur.singularValues();
+        double thr_2 = min_reciprocal_condition_number * singular_schur.maxCoeff();
+        Eigen::VectorXd inv_schur_singulars = singular_schur.unaryExpr(
+            [thr_2](double s) { return s > thr_2 ? 1.0 / s : 0.0; });
+        Schur_inv = svd_schur.matrixV() * inv_schur_singulars.asDiagonal() * svd_schur.matrixU().transpose();
+    }
+
+    // compute (H^-1)_pp
+    Eigen::MatrixXd Hinv_pp = H_pp_inv + tmp1 * Schur_inv * tmp2;
+
+    return Hinv_pp;
 }

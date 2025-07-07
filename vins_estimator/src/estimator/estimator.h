@@ -188,7 +188,7 @@ class Estimator
 
     // added by myself
     std::array<Eigen::Matrix<double, SIZE_POSE - 1, SIZE_POSE - 1>, WINDOW_SIZE> pose_Covs;
-    Eigen::MatrixXd computeSchur(const Eigen::MatrixXd &H, int pose_dim, double eps_rel = 1e-12, int max_alpha_exp = 20);
+    Eigen::MatrixXd computeHinvPP(const Eigen::MatrixXd& H);
     void outliersRejection(set<int> &keepIndex, set<int> &removeIndex);
     double computeMahDist(const Matrix3d &Ri, const Vector3d &Pi,
         const Matrix3d &rici, const Vector3d &tici,
