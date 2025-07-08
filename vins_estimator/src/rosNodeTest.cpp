@@ -7,9 +7,6 @@
  * you may not use this file except in compliance with the License.
  *
  * Author: Qin Tong (qintonguav@gmail.com)
- * 
- * Modified by: Hu Yuquan
- * Date of modification: [2025-6-29]
  *******************************************************/
 
 #include <stdio.h>

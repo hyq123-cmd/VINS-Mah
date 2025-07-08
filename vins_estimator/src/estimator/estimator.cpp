@@ -1704,7 +1704,7 @@ void Estimator::updateLatestStates()
 // added by myself
 void Estimator::outliersRejection(set<int> &keepIndex, set<int> &removeIndex)
 {
-    double chi_square_test = 9.210;
+    double chi_square_test = 5.99;
     
     for(auto &it_per_id : f_manager.feature)
     {
