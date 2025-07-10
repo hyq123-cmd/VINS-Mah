@@ -29,7 +29,7 @@ catkin build vins_mah
 source ~/catkin_ws/devel/setup.bash
 ```
 ## VIODE Example
-You can download the [VIODE dataset](https://zenodo.org/records/4493401) to your dataset folder Dataset_Folder. You can run monocular camera + IMU, stereo cameras + IMU and stereo cameras. You just need to modify the number of cameras and IMUs in the configuration file. The following will run 0_none.bag under city_day in the form of monocular camera + IMU.
+You can download the [VIODE dataset](https://zenodo.org/records/4493401) to your dataset folder Dataset_Folder.  The following will run 0_none.bag under city_day in the form of monocular camera + IMU.
 ```
 roslaunch vins_mah vins_viode.launch
 rosbag play Dataset_Folder/city_day/0_none.bag
