@@ -1938,9 +1938,9 @@ Eigen::MatrixXd Estimator::computeHinvPP(const MatrixXd& H_total)
     MatrixXd X = W.topRows(m);
 
     // ---- verification (optional) ----
-    MatrixXd residual = H_total * W - E_proj;
-    double abs_res = residual.norm();
-    double rel_res = abs_res / E_proj.norm();
+    // MatrixXd residual = H_total * W - E_proj;
+    // double abs_res = residual.norm();
+    // double rel_res = abs_res / E_proj.norm();
 
     // std::cout << "[computeX] rank(H) = " << cod.rank() << "/" << n
     //           << "  abs_res = " << abs_res
