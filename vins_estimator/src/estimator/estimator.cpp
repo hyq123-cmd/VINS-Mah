@@ -1088,7 +1088,6 @@ void Estimator::optimization()
             if (imu_i != imu_j)
             {
                 Vector3d pts_j = it_per_frame.point;
-                // 修改这里，添加一个协方差的传入
                 ProjectionTwoFrameOneCamFactor *f_td = new ProjectionTwoFrameOneCamFactor(pts_i, pts_j, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocity,
                                                                  it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
                 problem.AddResidualBlock(f_td, loss_function, para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Feature[feature_index], para_Td[0]);
@@ -1197,7 +1196,6 @@ void Estimator::optimization()
         Eigen::MatrixXd H_total = J.transpose() * J;
 
         // compute covariance
-        // Eigen::MatrixXd H_pinv = computeHinvFromJacobian(J);
         Eigen::MatrixXd Hinv_pp = computeHinvPP(H_total);
         
         // store the covariances of UAV's pose
@@ -1207,19 +1205,23 @@ void Estimator::optimization()
         }
 
         Eigen::Matrix<double, 3, 1> position_variance = pose_Covs[9].diagonal().head<3>();
-        // Eigen::Matrix<double, 3, 1> cere_variance = cov.diagonal().head<3>();
+        // Eigen::Matrix<double, 3, 1> position_variance = cov.diagonal().head<3>();
 
-        // print
-        std::stringstream ss;
-        ss << "\nposition std: [" 
-        << sqrt(position_variance(0)) << ", " 
-        << sqrt(position_variance(1)) << ", " 
-        << sqrt(position_variance(2)) << "]";
-        // << "cere std: ["
-        // << sqrt(cere_variance(0)) << ", " 
-        // << sqrt(cere_variance(1)) << ", " 
-        // << sqrt(cere_variance(2)) << "]";
-        ROS_INFO_STREAM(ss.str());
+        // print and write
+        // std::ofstream file("/mnt/d/temp_resources/output.txt", std::ios::app);
+        // if (file.is_open()) {
+        //     file << para_Pose[9][0] << "; " << sqrt(position_variance(0)) << std::endl;
+        //     file.close();
+        // }
+        // else {
+        //     std::cerr << "无法打开文件" << std::endl;
+        // }
+        // std::stringstream ss;
+        // ss << "\nposition std: [" 
+        // << sqrt(position_variance(0)) << ", " 
+        // << sqrt(position_variance(1)) << ", " 
+        // << sqrt(position_variance(2)) << "]";
+        // ROS_INFO_STREAM(ss.str());
     }
 
     double2vector();
@@ -1914,53 +1916,35 @@ pair<int, int> Estimator::computeMaxParallaxFrame(const FeaturePerId& feature, c
     return {best_frame, best_camera};
 }
 
-Eigen::MatrixXd Estimator::computeHinvPP(const Eigen::MatrixXd& H)
+Eigen::MatrixXd Estimator::computeHinvPP(const MatrixXd& H_total)
 {
-    const int dim_p = 66;
-    const double min_reciprocal_condition_number = 1e-12;
-    int total_dim = H.rows();
+    constexpr int m = 66;
+    const int n = H_total.rows();
+    assert(H_total.cols() == n);
 
-    // divide Hessian matrix into four blocks
-    Eigen::MatrixXd H_pp = H.topLeftCorner(dim_p, dim_p);
-    Eigen::MatrixXd H_pl = H.topRightCorner(dim_p, total_dim - dim_p);
-    Eigen::MatrixXd H_lp = H.bottomLeftCorner(total_dim - dim_p, dim_p);
-    Eigen::MatrixXd H_ll = H.bottomRightCorner(total_dim - dim_p, total_dim - dim_p);
+    // RHS: [I; 0]
+    MatrixXd E = MatrixXd::Zero(n, m);
+    E.topLeftCorner(m, m).setIdentity();
 
-    Eigen::LLT<Eigen::MatrixXd> llt(H_pp);
-    Eigen::MatrixXd H_pp_inv;
-    if (llt.info() == Eigen::Success) { // try to use Cholesky
-        H_pp_inv = llt.solve(Eigen::MatrixXd::Identity(H_pp.rows(), H_pp.cols()));
-    }
-    else {  // compute inverse or pseudo-inverse of H_pp (using SVD with regularization)
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_pp, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        Eigen::VectorXd singular_values = svd.singularValues();
-        double thr_1 = min_reciprocal_condition_number * singular_values.maxCoeff(); 
-        Eigen::VectorXd inv_singulars = singular_values.unaryExpr(
-            [thr_1](double s) { return s > thr_1 ? 1.0 / s : 0.0; });
-        H_pp_inv = svd.matrixV() * inv_singulars.asDiagonal() * svd.matrixU().transpose();
-    }
+    // 1) rank-revealing solve (min-norm)
+    CompleteOrthogonalDecomposition<MatrixXd> cod(H_total);
+    MatrixXd W0 = cod.solve(E);          // = H^† E
 
-    // compute Schur complement
-    Eigen::MatrixXd tmp1 = H_pp_inv * H_pl;
-    Eigen::MatrixXd tmp2 = H_lp * H_pp_inv;
-    Eigen::MatrixXd Schur = H_ll - tmp2 * H_pl;
+    // 2) project RHS without eigendecomp: E_proj = H * W0 = P_R(H) * E
+    MatrixXd E_proj = H_total * W0;
 
-    Eigen::LLT<Eigen::MatrixXd> lls(Schur);
-    Eigen::MatrixXd Schur_inv;
-    if (lls.info() == Eigen::Success) { // try to use Cholesky
-        Schur_inv  = lls.solve(Eigen::MatrixXd::Identity(Schur.rows(), Schur.cols()));
-    }
-    else { // Invert Schur complement (also use SVD or regularization)
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd_schur(Schur, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        Eigen::VectorXd singular_schur = svd_schur.singularValues();
-        double thr_2 = min_reciprocal_condition_number * singular_schur.maxCoeff();
-        Eigen::VectorXd inv_schur_singulars = singular_schur.unaryExpr(
-            [thr_2](double s) { return s > thr_2 ? 1.0 / s : 0.0; });
-        Schur_inv = svd_schur.matrixV() * inv_schur_singulars.asDiagonal() * svd_schur.matrixU().transpose();
-    }
+    // 3) solve again on the projected RHS
+    MatrixXd W = cod.solve(E_proj);
+    MatrixXd X = W.topRows(m);
 
-    // compute (H^-1)_pp
-    Eigen::MatrixXd Hinv_pp = H_pp_inv + tmp1 * Schur_inv * tmp2;
+    // ---- verification (optional) ----
+    MatrixXd residual = H_total * W - E_proj;
+    double abs_res = residual.norm();
+    double rel_res = abs_res / E_proj.norm();
 
-    return Hinv_pp;
+    // std::cout << "[computeX] rank(H) = " << cod.rank() << "/" << n
+    //           << "  abs_res = " << abs_res
+    //           << "  rel_res = " << rel_res << "\n";
+
+    return X;
 }

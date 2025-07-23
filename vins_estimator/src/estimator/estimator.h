@@ -188,7 +188,6 @@ class Estimator
 
     // added by myself
     std::array<Eigen::Matrix<double, SIZE_POSE - 1, SIZE_POSE - 1>, WINDOW_SIZE> pose_Covs;
-    Eigen::MatrixXd computeHinvPP(const Eigen::MatrixXd& H);
     void outliersRejection(set<int> &keepIndex, set<int> &removeIndex);
     double computeMahDist(const Matrix3d &Ri, const Vector3d &Pi,
         const Matrix3d &rici, const Vector3d &tici,
@@ -204,4 +203,5 @@ class Estimator
             const double depth, const Vector3d &uvi,
             const Vector3d &uvj);
     pair<int, int> computeMaxParallaxFrame(const FeaturePerId& feature, const int cur_frame);
+    Eigen::MatrixXd computeHinvPP(const MatrixXd& H_total);
 };
