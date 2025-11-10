@@ -544,8 +544,9 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric);
         f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
         set<int> keepIndex, removeIndex;
-        outliersRejection(keepIndex, removeIndex);
-        f_manager.removeOutlier(removeIndex);
+	//outliersRejection(keepIndex, removeIndex);
+        outliersRejection(removeIndex);
+	f_manager.removeOutlier(removeIndex);
         // featureTracker.saveImage(inputImageCnt, keepIndex, removeIndex);
         optimization();
         // set<int> removeIndex;
@@ -1139,13 +1140,13 @@ void Estimator::optimization()
 
     // added by myself
     std::vector<int> frame_list;
-    if(frame_count == 10 )
+    if(frame_count == WINDOW_SIZE )
     {
         if (marginalization_flag == MARGIN_OLD) {
-            frame_list = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+            frame_list = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
         }
         else {
-            frame_list = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10};
+            frame_list = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
         }
     }
     else
@@ -1196,15 +1197,15 @@ void Estimator::optimization()
         Eigen::MatrixXd H_total = J.transpose() * J;
 
         // compute covariance
-        Eigen::MatrixXd Hinv_pp = computeHinvPP(H_total);
+        // Eigen::MatrixXd Hinv_pp = computeHinvPP(H_total);
         
         // store the covariances of UAV's pose
         for(size_t i = 0; i < frame_list.size(); i++) {
             int block_start = frame_list[i] * 6;
-            pose_Covs[i] = Hinv_pp.block(block_start, block_start, 6, 6);
+            // pose_Covs[i] = Hinv_pp.block(block_start, block_start, 6, 6);
         }
 
-        Eigen::Matrix<double, 3, 1> position_variance = pose_Covs[9].diagonal().head<3>();
+	// Eigen::Matrix<double, 3, 1> position_variance = pose_Covs[9].diagonal().head<3>();
         // Eigen::Matrix<double, 3, 1> position_variance = cov.diagonal().head<3>();
 
         // print and write
@@ -1918,7 +1919,7 @@ pair<int, int> Estimator::computeMaxParallaxFrame(const FeaturePerId& feature, c
 
 Eigen::MatrixXd Estimator::computeHinvPP(const MatrixXd& H_total)
 {
-    constexpr int m = 66;
+    constexpr int m = WINDOW_SIZE * 6;
     const int n = H_total.rows();
     assert(H_total.cols() == n);
 
